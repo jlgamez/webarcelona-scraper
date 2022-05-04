@@ -94,7 +94,6 @@ def scrape_data(event, category, exclude_events):
     request_body['bookingLink'] = url
     request_body['categoryId'] = category_id
 
-
     logger.debug('Generated activity payload: ' + str(request_body))
     return request_body
 
@@ -116,7 +115,7 @@ def add_activities_to_database(activity_category):
 
     # access the web category link and fetch all events inside
     events = get_events_list(web_category_link)
-    logger.debug('Extracted events from ' + str(web_category_link) + ': ' + str(events) )
+    logger.debug('Extracted events from ' + str(web_category_link) + ': ' + str(events))
 
     # scrape the required data from each event (if the title is already
     # in the database the returned object will be None
@@ -127,7 +126,7 @@ def add_activities_to_database(activity_category):
         if payload is not None:
             try:
                 injector.inject(payload)
-                logger.info('Payload successfully injected in database: ' + str(payload) )
+                logger.info('Payload successfully injected in database: ' + str(payload))
             except Exception as e:
                 logger.debug(e)
 
@@ -137,8 +136,3 @@ categories_list = ['culture', 'music', 'city']
 
 with concurrent.futures.ThreadPoolExecutor() as executor:
     executor.map(add_activities_to_database, categories_list)
-
-
-
-
-
