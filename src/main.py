@@ -12,6 +12,9 @@ base_url = 'https://www.webarcelona.net/barcelona-events/'
 web_barcelona_html = requests.get(base_url).text
 soup = BeautifulSoup(web_barcelona_html, 'html.parser')
 
+# array for all activities to be injected in the database.
+activities_to_save = []
+
 
 def find_link_of_category(category_name):
     category_a_tag = soup.find('a', attrs={'title': category_name})
@@ -52,7 +55,7 @@ def extract_event_date(event_li):
     return event_date
 
 
-def extract_event_location(event_url):
+def extract_event_location_and_booking_link(event_url):
     # to extract the location open the event link and extract from there
     logger.debug('Accessing the event url to get the description')
     event_page_html = requests.get(event_url).text
@@ -66,7 +69,17 @@ def extract_event_location(event_url):
         event_address = 'Barcelona'
         logger.debug('Address div has no text. Setting location to ' + str(event_address))
 
-    return event_address
+    # extract booking link
+    try:
+        buy_ticket_btn = event_soup.select_one('.field--name-field-buy-ticket-2')
+        booking_link = buy_ticket_btn.find('a').get('href')
+        logger.debug('Booking link extracted: ' + str(booking_link) + 'from ' + str(buy_ticket_btn))
+    except:
+        # if there is no booking button get the event url as booking_link
+        booking_link = event_url
+        logger.debug('Buy tickets btn not found, setting event url as booking link: ' + str(booking_link))
+
+    return event_address, booking_link
 
 
 def scrape_data(event, category, exclude_events):
@@ -82,7 +95,7 @@ def scrape_data(event, category, exclude_events):
     try:
         description = extract_event_description(event)
         date = extract_event_date(event)
-        location = extract_event_location(url)
+        location, booking_link = extract_event_location_and_booking_link(url)
         category_id = injector.get_category_id(category)
     except Exception as e:
         logger.debug(e)
@@ -91,14 +104,14 @@ def scrape_data(event, category, exclude_events):
     request_body['description'] = description
     request_body['date'] = date
     request_body['location'] = location
-    request_body['bookingLink'] = url
+    request_body['bookingLink'] = booking_link
     request_body['categoryId'] = category_id
 
     logger.debug('Generated activity payload: ' + str(request_body))
     return request_body
 
 
-def add_activities_to_database(activity_category):
+def get_new_activities(activity_category):
     # load titles that are already in the database to exclude them from the scraping session
     exclude_titles = injector.get_existing_titles_in_data_base(activity_category)
     logger.debug('Extracted "' + str(activity_category) + '" titles from database: ' + str(exclude_titles))
@@ -124,15 +137,19 @@ def add_activities_to_database(activity_category):
         payload = scrape_data(e, activity_category, exclude_titles)
         # inject the data when the object is not None
         if payload is not None:
-            try:
-                injector.inject(payload)
-                logger.info('Payload successfully injected in database: ' + str(payload))
-            except Exception as e:
-                logger.debug(e)
+            activities_to_save.append(payload)
 
 
-# scrape and inject the data asynchronously with a ThreadPoolExecutor
 categories_list = ['culture', 'music', 'city']
 
+# scrape the data asynchronously with a ThreadPoolExecutor
 with concurrent.futures.ThreadPoolExecutor() as executor:
-    executor.map(add_activities_to_database, categories_list)
+    executor.map(get_new_activities, categories_list)
+
+# inject new activities in the database sequentially in a queue
+for data in activities_to_save:
+    try:
+        injector.inject(data)
+        logger.info('Activity injected: ' + str(data))
+    except Exception as e:
+        logger.debug(e)
