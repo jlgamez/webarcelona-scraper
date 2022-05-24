@@ -10,4 +10,4 @@ The bot is designed to scrape data from the web and inject new activities in a S
 ## Usage
 * After cloning the repository in the root folder run `pipenv install` to install dependencies
 * Run `pipenv shell` to launch the virtual env
-* Run the bot with `python main.py`
+* Run the bot with `python src/main.py`
